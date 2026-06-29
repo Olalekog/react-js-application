@@ -596,7 +596,7 @@ TERRAFORM_VERSION=1.9.0
 
 ## Cognito and Social Login Variables
 
-Each environment needs callback and logout URLs for Cognito. Local/dev can use localhost, while UAT and production should use real DNS names.
+Each environment needs callback and logout URLs for Cognito. This project now uses `mydevopsprojects.shop` for public application URLs.
 
 Example environment variables or Terraform values:
 
@@ -605,6 +605,10 @@ COGNITO_DOMAIN
 COGNITO_CLIENT_ID
 COGNITO_REDIRECT_URI
 COGNITO_LOGOUT_URI
+
+Dev callback/logout: https://app.dev.mydevopsprojects.shop
+UAT callback/logout: https://app.uat.mydevopsprojects.shop
+Production callback/logout: https://app.mydevopsprojects.shop
 GOOGLE_CLIENT_ID
 FACEBOOK_APP_ID
 ```
@@ -637,6 +641,57 @@ This project uses multiple security controls:
 - Production approval gate in GitHub Environments
 
 ---
+
+
+---
+
+## Environment VPC Design
+
+Terraform creates a separate VPC for each application environment. No pre-existing VPC is required. Each VPC is created in `us-east-1` and spans 3 dynamically selected available Availability Zones.
+
+| Environment | VPC Name | VPC CIDR | Region | AZ Selection |
+|---|---|---|---|---|
+| Dev | `vpc-dev` | `10.20.0.0/16` | `us-east-1` | Dynamic first 3 available AZs |
+| UAT | `vpc-uat` | `10.10.0.0/16` | `us-east-1` | Dynamic first 3 available AZs |
+| Production | `vpc-production` | `10.30.0.0/16` | `us-east-1` | Dynamic first 3 available AZs |
+
+The network module uses this Terraform data source to discover available Availability Zones at deploy time:
+
+```hcl
+data "aws_availability_zones" "available" {
+  state = "available"
+
+  filter {
+    name   = "opt-in-status"
+    values = ["opt-in-not-required", "opted-in"]
+  }
+}
+
+locals {
+  selected_availability_zones = slice(data.aws_availability_zones.available.names, 0, var.az_count)
+}
+```
+
+Each environment creates 12 subnets total:
+
+```text
+VPC /16
+├── 3 Public Subnets
+│   ├── Public Application Load Balancer
+│   ├── Internet Gateway route
+│   └── NAT Gateways
+│
+├── 3 Private Frontend Subnets
+│   └── React/Nginx EC2 Auto Scaling Group
+│
+├── 3 Private Backend Subnets
+│   └── FastAPI EC2 Auto Scaling Group
+│
+└── 3 Private Database Subnets
+    └── Amazon RDS MySQL subnet group
+```
+
+Private frontend and backend subnets use NAT gateways for outbound access to services such as ECR, package repositories, and operating system updates. Database subnets use an isolated database route table with no internet route.
 
 ## Network Design
 
@@ -832,3 +887,142 @@ curl -X POST http://<public-alb-dns-name>/api/users \
 ## Final Summary
 
 This project implements a secure AWS multi-account 3-tier application deployment platform. The tooling account provides centralized CI/CD trust and Terraform state. The bootstrap stack prepares each target account with deploy roles and ECR repositories. The app stack deploys the React frontend, FastAPI backend, Amazon Cognito authentication layer, and RDS MySQL database into dev, uat, and production accounts using reusable Terraform modules and GitHub Actions automation.
+
+---
+
+## Route 53 DNS Design
+
+This project includes Route 53 where it applies:
+
+- **Public Route 53 DNS** for the frontend public Application Load Balancer
+- **Private Route 53 DNS** for the backend internal Application Load Balancer
+- Environment-specific DNS names for dev, uat, and production
+
+The frontend public DNS record is optional because it requires a real domain name and a Route 53 public hosted zone. The private backend DNS record is enabled by default because it is used only inside the VPC.
+
+### Public DNS Flow
+
+```text
+User Browser
+  |
+  | https://app.dev.mydevopsprojects.shop, app.uat.mydevopsprojects.shop, or app.mydevopsprojects.shop
+  v
+Route 53 Public Hosted Zone
+  |
+  | Alias A/AAAA record
+  v
+Public Application Load Balancer
+  |
+  v
+Frontend EC2 Auto Scaling Group
+```
+
+### Private Backend DNS Flow
+
+```text
+Frontend EC2 instances
+  |
+  | http://api.dev.three-tier-app.internal:8000
+  v
+Route 53 Private Hosted Zone
+  |
+  | Alias A record
+  v
+Internal Application Load Balancer
+  |
+  v
+Backend EC2 Auto Scaling Group
+```
+
+### Environment DNS Defaults
+
+| Environment | Public Frontend Record | Private Hosted Zone | Private Backend Record |
+|---|---|---|---|
+| Dev | `app.dev.mydevopsprojects.shop` | `dev.three-tier-app.internal` | `api.dev.three-tier-app.internal` |
+| UAT | `app.uat.mydevopsprojects.shop` | `uat.three-tier-app.internal` | `api.uat.three-tier-app.internal` |
+| Production | `app.mydevopsprojects.shop` | `production.three-tier-app.internal` | `api.production.three-tier-app.internal` |
+
+### mydevopsprojects.shop DNS Plan
+
+This project is configured to use your domain name:
+
+```text
+mydevopsprojects.shop
+```
+
+The environment public URLs are:
+
+| Environment | Public URL | Hosted Zone Strategy |
+|---|---|---|
+| Dev | `https://app.dev.mydevopsprojects.shop` | Public hosted zone: `dev.mydevopsprojects.shop` |
+| UAT | `https://app.uat.mydevopsprojects.shop` | Public hosted zone: `uat.mydevopsprojects.shop` |
+| Production | `https://app.mydevopsprojects.shop` | Public hosted zone: `mydevopsprojects.shop` |
+
+For a multi-account design, dev and uat can use delegated subdomain hosted zones. After Terraform creates `dev.mydevopsprojects.shop` and `uat.mydevopsprojects.shop`, copy their name servers into the parent `mydevopsprojects.shop` hosted zone as NS records.
+
+If `mydevopsprojects.shop` already has a hosted zone, set `create_public_hosted_zone = false` and provide the existing hosted zone ID using `existing_public_hosted_zone_id`.
+
+### Public Hosted Zone Options
+
+Use an existing public hosted zone by setting:
+
+```hcl
+create_public_hosted_zone      = false
+existing_public_hosted_zone_id = "Z123456789ABCDEFG"
+public_hosted_zone_name        = "mydevopsprojects.shop"
+create_public_record           = true
+frontend_public_record_name    = "app.mydevopsprojects.shop"
+```
+
+Or allow Terraform to create a new public hosted zone:
+
+```hcl
+create_public_hosted_zone      = true
+existing_public_hosted_zone_id = ""
+public_hosted_zone_name        = "mydevopsprojects.shop"
+create_public_record           = true
+frontend_public_record_name    = "app.mydevopsprojects.shop"
+```
+
+If Terraform creates the public hosted zone, copy the output name servers to your domain registrar.
+
+### Private Hosted Zone Defaults
+
+Private DNS is enabled by default:
+
+```hcl
+create_private_hosted_zone  = true
+private_hosted_zone_name    = "dev.three-tier-app.internal"
+create_private_record       = true
+backend_private_record_name = "api"
+```
+
+The frontend Auto Scaling Group receives the backend private DNS name through its runtime environment variables and uses it to proxy `/api/*` requests to the backend.
+
+### Route 53 Terraform Module
+
+The project includes this module:
+
+```text
+terraform/modules/route53/
+├── main.tf
+├── variables.tf
+└── outputs.tf
+```
+
+The module creates:
+
+- Optional public hosted zone
+- Optional public `A` and `AAAA` alias records for the frontend ALB
+- Private hosted zone associated with the environment VPC
+- Private `A` alias record for the backend internal ALB
+
+Useful outputs:
+
+```text
+frontend_public_fqdn
+backend_private_fqdn
+public_hosted_zone_id
+private_hosted_zone_id
+public_hosted_zone_name_servers
+```
