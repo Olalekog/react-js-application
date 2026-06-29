@@ -1,0 +1,20 @@
+digraph G {
+  graph [rankdir=TB, bgcolor="white", pad="0.5", nodesep="0.45", ranksep="0.55", fontname="Arial"];
+  node [shape=box, style="rounded,filled", fontname="Arial", fontsize=11, margin="0.12,0.08", fillcolor="#F3F6FA"];
+  edge [fontname="Arial", fontsize=10, color="#555555", arrowsize=0.8];
+
+  start [label="Developer pushes code\nor runs workflow manually", fillcolor="#E8F0FE"];
+  branch [label="Workflow resolves environment\ndevelop=dev • uat=uat • main=production", fillcolor="#E8F0FE"];
+  oidc [label="GitHub assumes Tooling Bootstrap Role\nusing OIDC", fillcolor="#D9EAF7"];
+  ssm [label="Read environment deploy role ARN\nfrom SSM SecureString", fillcolor="#D9EAF7"];
+  assume [label="Assume target account deploy role", fillcolor="#D9EAF7"];
+  build [label="Build Docker images\nReact frontend + FastAPI backend", fillcolor="#E2F0D9"];
+  push [label="Push images to target account ECR", fillcolor="#E2F0D9"];
+  init [label="Terraform init with centralized state\nS3 + DynamoDB lock + KMS", fillcolor="#FFF2CC"];
+  plan [label="Terraform plan", fillcolor="#FFF2CC"];
+  approval [label="Production approval gate\nGitHub Environment reviewers", fillcolor="#F4CCCC"];
+  apply [label="Terraform apply", fillcolor="#FFF2CC"];
+  deploy [label="Deploy/refresh app stack\nALB • EC2 ASG • RDS • Secrets • KMS", fillcolor="#D9EAD3"];
+
+  start -> branch -> oidc -> ssm -> assume -> build -> push -> init -> plan -> approval -> apply -> deploy;
+}
