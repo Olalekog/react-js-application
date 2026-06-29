@@ -137,6 +137,18 @@ jobs:
       - name: Terraform Validate
         run: terraform validate
 
+      - name: Import existing tooling resources if needed
+        shell: bash
+        run: |
+          terraform import aws_kms_alias.state alias/react-js-application-tooling-state-kms || true
+
+          terraform import aws_s3_bucket.state react-js-application-terraform-state-866934333672 || true
+
+          terraform import aws_dynamodb_table.locks react-js-application-terraform-locks || true
+
+          terraform import aws_iam_openid_connect_provider.github-oidc-connection \
+            arn:aws:iam::866934333672:oidc-provider/token.actions.githubusercontent.com || true  
+
       - name: Terraform Plan
         if: steps.resolve-action.outputs.terraform_action == 'plan'
         run: |
