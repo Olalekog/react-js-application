@@ -1,0 +1,66 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfplan
+tfplan
+plan.out
+.terraform.lock.hcl
+
+# Keep tfvars examples only if you choose not to commit real tfvars
+# *.tfvars
+# !*.tfvars.example
+
+# AWS / credentials
+.aws/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+credentials
+config
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node / React
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+build/
+.vite/
+
+# Docker
+.docker/
+docker-compose.override.yml
+
+# Logs / OS / IDE
+*.log
+logs/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Generated archives
+*.zip
+*.tar
+*.tar.gz

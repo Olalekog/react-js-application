@@ -1,0 +1,94 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.lock.hcl
+
+# Keep example variable files
+!*.tfvars.example
+!terraform.tfvars.example
+
+# Terraform plan files
+*.tfplan
+tfplan
+plan.out
+
+# AWS credentials and secrets
+.aws/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+credentials
+config
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node / React
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+build/
+.vite/
+
+# Docker
+.docker/
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Local scripts/output
+tmp/
+temp/
+.local/
+downloads/
+
+# Sensitive application files
+secrets/
+*.secret
+*.password
+*.token
+
+# Generated archives
+*.zip
+*.tar
+*.tar.gz

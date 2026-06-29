@@ -1,0 +1,148 @@
+locals {
+  name_prefix = "${var.project_name}-tooling"
+  common_tags = merge(var.tags, {
+    Project     = var.project_name
+    Environment = "tooling"
+    ManagedBy   = "terraform"
+  })
+}
+
+resource "aws_kms_key" "state" {
+  description             = "Terraform state KMS key"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+
+  tags = merge(local.common_tags, {
+    Name = "${local.name_prefix}-state-kms"
+  })
+}
+
+resource "aws_kms_alias" "state" {
+  name          = "alias/${local.name_prefix}-state-kms"
+  target_key_id = aws_kms_key.state.key_id
+}
+
+resource "aws_s3_bucket" "state" {
+  bucket = "${var.project_name}-terraform-state-${var.tooling_account_id}"
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-terraform-state"
+  })
+}
+
+resource "aws_s3_bucket_versioning" "state" {
+  bucket = aws_s3_bucket.state.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
+  bucket = aws_s3_bucket.state.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.state.arn
+      sse_algorithm     = "aws:kms"
+    }
+
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "state" {
+  bucket                  = aws_s3_bucket.state.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_dynamodb_table" "locks" {
+  name         = "${var.project_name}-terraform-locks"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "LockID"
+
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = aws_kms_key.state.arn
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-terraform-locks"
+  })
+}
+
+resource "aws_iam_openid_connect_provider" "github-oidc-connection" {
+  url             = "https://token.actions.githubusercontent.com"
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+}
+
+resource "aws_iam_role" "bootstrap" {
+  name = "${var.project_name}-github-actions-bootstrap-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Federated = aws_iam_openid_connect_provider.github-oidc-connection.arn
+      }
+      Action = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+        }
+        StringLike = {
+          "token.actions.githubusercontent.com:sub" = "repo:${var.github_org}/${var.github_repo}:*"
+        }
+      }
+    }]
+  })
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_role_policy" "bootstrap" {
+  name = "${var.project_name}-bootstrap-policy"
+  role = aws_iam_role.bootstrap.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter", "ssm:GetParameters", "ssm:PutParameter"]
+        Resource = "arn:aws:ssm:${var.aws_region}:${var.tooling_account_id}:parameter/${var.project_name}/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
+        Resource = aws_kms_key.state.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["sts:AssumeRole"]
+        Resource = "arn:aws:iam::*:role/${var.project_name}-*-github-actions-deploy-role"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"]
+        Resource = [aws_s3_bucket.state.arn, "${aws_s3_bucket.state.arn}/*"]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:UpdateItem", "dynamodb:DescribeTable"]
+        Resource = aws_dynamodb_table.locks.arn
+      }
+    ]
+  })
+}
+
