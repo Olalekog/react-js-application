@@ -66,9 +66,9 @@ The project supports different environments across different AWS accounts:
 
 | Environment | Branch | AWS Account | Terraform Folder | State File |
 |---|---|---|---|---|
-| Dev | `develop` | Dev account | `terraform/environments/dev` | `three-tier-app/dev/terraform.tfstate` |
-| UAT | `uat` | UAT account | `terraform/environments/uat` | `three-tier-app/uat/terraform.tfstate` |
-| Production | `main` | Production account | `terraform/environments/production` | `three-tier-app/production/terraform.tfstate` |
+| Dev | `develop` | Dev account | `terraform/environments/dev` | `react-js-application/dev/terraform.tfstate` |
+| UAT | `uat` | UAT account | `terraform/environments/uat` | `react-js-application/uat/terraform.tfstate` |
+| Production | `main` | Production account | `terraform/environments/production` | `react-js-application/production/terraform.tfstate` |
 
 ---
 
@@ -654,8 +654,8 @@ GitHub Variables:
 AWS_REGION
 PROJECT_NAME
 TOOLING_ACCOUNT_ID
-GITHUB_ORG
-GITHUB_REPO
+GH_ORG
+GH_REPO
 TERRAFORM_VERSION
 ```
 
@@ -760,16 +760,16 @@ Production should use GitHub Environment approval before apply.
 
 ```text
 AWS_REGION=us-east-1
-PROJECT_NAME=three-tier-app
-TOOLING_ACCOUNT_ID=111111111111
-DEV_ACCOUNT_ID=222222222222
-UAT_ACCOUNT_ID=333333333333
-PRODUCTION_ACCOUNT_ID=444444444444
-GITHUB_ORG=your-github-username-or-org
-GITHUB_REPO=your-repo-name
-BOOTSTRAP_ROLE_ARN=arn:aws:iam::111111111111:role/three-tier-app-github-actions-bootstrap-role
-TF_STATE_BUCKET=three-tier-app-terraform-state-111111111111
-TF_LOCK_TABLE=three-tier-app-terraform-locks
+PROJECT_NAME=react-js-application
+TOOLING_ACCOUNT_ID=866934333672
+DEV_ACCOUNT_ID=866934333672
+UAT_ACCOUNT_ID=866934333672
+PRODUCTION_ACCOUNT_ID=866934333672
+GH_ORG=your-github-username-or-org
+GH_REPO=your-repo-name
+BOOTSTRAP_ROLE_ARN=arn:aws:iam::866934333672:role/react-js-application-github-actions-bootstrap-role
+TF_STATE_BUCKET=react-js-application-terraform-state-866934333672
+TF_LOCK_TABLE=react-js-application-terraform-locks
 TF_STATE_KMS_KEY_ID=alias/three-tier-app-tooling-state-kms
 FRONTEND_REPOSITORY_NAME=react-frontend
 BACKEND_REPOSITORY_NAME=fastapi-backend
@@ -851,8 +851,8 @@ Images are pushed to ECR in the target account:
 Example:
 
 ```text
-222222222222.dkr.ecr.us-east-1.amazonaws.com/react-frontend:dev-a1b2c3d
-222222222222.dkr.ecr.us-east-1.amazonaws.com/fastapi-backend:dev-a1b2c3d
+866934333672.dkr.ecr.us-east-1.amazonaws.com/react-frontend:dev-a1b2c3d
+866934333672.dkr.ecr.us-east-1.amazonaws.com/fastapi-backend:dev-a1b2c3d
 ```
 
 ---
@@ -862,9 +862,9 @@ Example:
 Terraform state is centralized in the tooling account, but each environment has a separate state file.
 
 ```text
-s3://three-tier-app-terraform-state-111111111111/three-tier-app/dev/terraform.tfstate
-s3://three-tier-app-terraform-state-111111111111/three-tier-app/uat/terraform.tfstate
-s3://three-tier-app-terraform-state-111111111111/three-tier-app/production/terraform.tfstate
+s3://react-js-application-terraform-state-866934333672/react-js-application/dev/terraform.tfstate
+s3://react-js-application-terraform-state-866934333672/react-js-application/uat/terraform.tfstate
+s3://react-js-application-terraform-state-866934333672/react-js-application/production/terraform.tfstate
 ```
 
 This ensures that dev, uat, and production do not share the same state.
