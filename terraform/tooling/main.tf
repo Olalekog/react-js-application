@@ -12,7 +12,7 @@ resource "aws_kms_key" "state-file-key" {
   enable_key_rotation     = true
   deletion_window_in_days = 30
   tags = merge(local.common_tags, {
-    Name = "tooling-${local.name_prefix}-state-kms"
+    Name = "tooling-${local.name_prefix}-state-kms-key"
   })
 }
 
@@ -77,21 +77,21 @@ resource "aws_dynamodb_table" "state-file-locks" {
   })
 }
 
-resource "aws_iam_openid_connect_provider" "github-rjs" {
+resource "aws_iam_openid_connect_provider" "github-react-app" {
   url             = "https://token.actions.githubusercontent.com"
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
 }
 
-resource "aws_iam_role" "tooling-bootstrap" {
-  name = "${var.project_name}-github-actions-tooling-bootstrap-role"
+resource "aws_iam_role" "react-app-tooling-bootstrap" {
+  name = "${var.project_name}-github-actions-react-app-tooling-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect = "Allow"
       Principal = {
-        Federated = aws_iam_openid_connect_provider.github-rjs.arn
+        Federated = aws_iam_openid_connect_provider.github-react-app.arn
       }
       Action = "sts:AssumeRoleWithWebIdentity"
       Condition = {
@@ -108,9 +108,9 @@ resource "aws_iam_role" "tooling-bootstrap" {
   tags = local.common_tags
 }
 
-resource "aws_iam_role_policy" "tooling-bootstrap" {
-  name = "${var.project_name}-bootstrap-policy"
-  role = aws_iam_role.tooling-bootstrap.id
+resource "aws_iam_role_policy" "react-app-tooling-bootstrap" {
+  name = "${var.project_name}-tooling-policy"
+  role = aws_iam_role.react-app-tooling-bootstrap.id
 
   policy = jsonencode({
     Version = "2012-10-17"
