@@ -33,4 +33,7 @@ variable "redirect_http_to_https" {
   default     = true
 }
 
-variable "tags" { type = map(string) default = {} }
+variable "tags" {
+  type    = map(string)
+  default = {}
+}
