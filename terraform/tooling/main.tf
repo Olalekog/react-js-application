@@ -1,5 +1,13 @@
-locals { name_prefix = "${var.project_name}-tooling" common_tags = merge(var.tags, { Project = var.project_name, Environment = "tooling", ManagedBy = "terraform" }) }
-resource "aws_kms_key" "state" { description = "Terraform state KMS key" enable_key_rotation = true deletion_window_in_days = 30 tags = merge(local.common_tags, { Name = "${local.name_prefix}-state-kms" }) }
+locals { 
+    name_prefix = "${var.project_name}-tooling" common_tags = merge(var.tags, { Project = var.project_name, Environment = "tooling", ManagedBy = "terraform" })
+    }
+    
+resource "aws_kms_key" "state" { 
+    description = "Terraform state KMS key"
+    enable_key_rotation = true
+    deletion_window_in_days = 30
+    tags = merge(local.common_tags, { Name = "${local.name_prefix}-state-kms" })
+    }
 resource "aws_kms_alias" "state" { name = "alias/${local.name_prefix}-state-kms" target_key_id = aws_kms_key.state.key_id }
 resource "aws_s3_bucket" "state" { bucket = "${var.project_name}-terraform-state-${var.tooling_account_id}" tags = merge(local.common_tags, { Name = "${var.project_name}-terraform-state" }) }
 resource "aws_s3_bucket_versioning" "state" { bucket = aws_s3_bucket.state.id versioning_configuration { status = "Enabled" } }
