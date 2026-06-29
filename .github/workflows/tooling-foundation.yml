@@ -1,5 +1,15 @@
 name: Tooling Foundation
 on:
+  push:
+    branches:
+      - dev
+    paths:
+      - "frontend/**"
+      - "backend/**"
+      - "terraform/environments/dev/**"
+      - "terraform/modules/**"
+      - ".github/workflows/app-deploy.yml"
+
   workflow_dispatch:
     inputs:
       action:
