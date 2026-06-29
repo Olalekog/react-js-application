@@ -93,7 +93,7 @@ resource "aws_iam_role" "bootstrap" {
     Statement = [{
       Effect = "Allow"
       Principal = {
-        Federated = aws_iam_openid_connect_provider.github.arn
+        Federated = aws_iam_openid_connect_provider.github-oidc-connection.arn
       }
       Action = "sts:AssumeRoleWithWebIdentity"
       Condition = {
