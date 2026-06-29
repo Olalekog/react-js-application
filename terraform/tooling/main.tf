@@ -22,7 +22,7 @@ resource "aws_kms_alias" "state-file-key-alias" {
 }
 
 resource "aws_s3_bucket" "state-file-bucket" {
-  bucket = "${var.project_name}-terraform-state-${var.tooling_account_id}"
+  bucket = "${var.project_name}-tooling-terraform-state-${var.tooling_account_id}"
   tags = merge(local.common_tags, {
     Name = "tooling-${var.project_name}-terraform-state"
   })
