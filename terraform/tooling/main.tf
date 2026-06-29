@@ -7,75 +7,75 @@ locals {
   })
 }
 
-resource "aws_kms_key" "state-file-key" {
-  description             = "Terraform state KMS key"
-  enable_key_rotation     = true
-  deletion_window_in_days = 30
-  tags = merge(local.common_tags, {
-    Name = "tooling-${local.name_prefix}-state-kms-key"
-  })
-}
+# resource "aws_kms_key" "state-file-key" {
+#   description             = "Terraform state KMS key"
+#   enable_key_rotation     = true
+#   deletion_window_in_days = 30
+#   tags = merge(local.common_tags, {
+#     Name = "tooling-${local.name_prefix}-state-kms-key"
+#   })
+# }
 
-resource "aws_kms_alias" "state-file-key-alias" {
-  name          = "alias/${local.name_prefix}-state-file-kms-key"
-  target_key_id = aws_kms_key.state-file-key.key_id
-}
+# resource "aws_kms_alias" "state-file-key-alias" {
+#   name          = "alias/${local.name_prefix}-state-file-kms-key"
+#   target_key_id = aws_kms_key.state-file-key.key_id
+# }
 
-resource "aws_s3_bucket" "state-file-bucket" {
-  bucket = "${var.project_name}-tooling-terraform-state-${var.tooling_account_id}"
-  tags = merge(local.common_tags, {
-    Name = "tooling-${var.project_name}-terraform-state"
-  })
-}
+# resource "aws_s3_bucket" "state-file-bucket" {
+#   bucket = "${var.project_name}-tooling-terraform-state-${var.tooling_account_id}"
+#   tags = merge(local.common_tags, {
+#     Name = "tooling-${var.project_name}-terraform-state"
+#   })
+# }
 
-resource "aws_s3_bucket_versioning" "state-file-bucket-versioning" {
-  bucket = aws_s3_bucket.state-file-bucket.id
+# resource "aws_s3_bucket_versioning" "state-file-bucket-versioning" {
+#   bucket = aws_s3_bucket.state-file-bucket.id
 
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
+#   versioning_configuration {
+#     status = "Enabled"
+#   }
+# }
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "state-file-bucket-encryption" {
-  bucket = aws_s3_bucket.state-file-bucket.id
+# resource "aws_s3_bucket_server_side_encryption_configuration" "state-file-bucket-encryption" {
+#   bucket = aws_s3_bucket.state-file-bucket.id
 
-  rule {
-    apply_server_side_encryption_by_default {
-      kms_master_key_id = aws_kms_key.state-file-key.arn
-      sse_algorithm     = "aws:kms"
-    }
+#   rule {
+#     apply_server_side_encryption_by_default {
+#       kms_master_key_id = aws_kms_key.state-file-key.arn
+#       sse_algorithm     = "aws:kms"
+#     }
 
-    bucket_key_enabled = true
-  }
-}
+#     bucket_key_enabled = true
+#   }
+# }
 
-resource "aws_s3_bucket_public_access_block" "state-file-bucket-access-block" {
-  bucket                  = aws_s3_bucket.state-file-bucket.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
+# resource "aws_s3_bucket_public_access_block" "state-file-bucket-access-block" {
+#   bucket                  = aws_s3_bucket.state-file-bucket.id
+#   block_public_acls       = true
+#   block_public_policy     = true
+#   ignore_public_acls      = true
+#   restrict_public_buckets = true
+# }
 
-resource "aws_dynamodb_table" "state-file-locks" {
-  name         = "${var.project_name}-terraform-state-file-locks"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "LockID"
+# resource "aws_dynamodb_table" "state-file-locks" {
+#   name         = "${var.project_name}-terraform-state-file-locks"
+#   billing_mode = "PAY_PER_REQUEST"
+#   hash_key     = "LockID"
 
-  attribute {
-    name = "LockID"
-    type = "S"
-  }
+#   attribute {
+#     name = "LockID"
+#     type = "S"
+#   }
 
-  server_side_encryption {
-    enabled     = true
-    kms_key_arn = aws_kms_key.state-file-key.arn
-  }
+#   server_side_encryption {
+#     enabled     = true
+#     kms_key_arn = aws_kms_key.state-file-key.arn
+#   }
 
-  tags = merge(local.common_tags, {
-    Name = "${var.project_name}-terraform-locks"
-  })
-}
+#   tags = merge(local.common_tags, {
+#     Name = "${var.project_name}-terraform-locks"
+#   })
+# }
 
 resource "aws_iam_openid_connect_provider" "github-react-app" {
   url             = "https://token.actions.githubusercontent.com"
