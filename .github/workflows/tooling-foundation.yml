@@ -1,0 +1,43 @@
+name: Tooling Foundation
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        type: choice
+        required: true
+        default: plan
+        options: [plan, apply, destroy]
+permissions:
+  contents: read
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  TOOLING_ACCOUNT_ID: ${{ vars.TOOLING_ACCOUNT_ID }}
+  PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+  GITHUB_ORG: ${{ vars.GITHUB_ORG }}
+  GITHUB_REPO: ${{ vars.GITHUB_REPO }}
+  TERRAFORM_VERSION: ${{ vars.TERRAFORM_VERSION }}
+jobs:
+  tooling:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: terraform/tooling } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.TOOLING_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.TOOLING_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: "${{ env.TERRAFORM_VERSION }}" }
+      - run: terraform init
+      - run: terraform fmt -check -recursive .
+      - run: terraform validate
+      - run: |
+          terraform plan             -var="aws_region=${AWS_REGION}"             -var="tooling_account_id=${TOOLING_ACCOUNT_ID}"             -var="project_name=${PROJECT_NAME}"             -var="github_org=${GITHUB_ORG}"             -var="github_repo=${GITHUB_REPO}"             -out=tfplan
+      - if: github.event.inputs.action == 'apply'
+        run: terraform apply -auto-approve tfplan
+      - if: github.event.inputs.action == 'destroy'
+        run: |
+          terraform destroy -auto-approve             -var="aws_region=${AWS_REGION}"             -var="tooling_account_id=${TOOLING_ACCOUNT_ID}"             -var="project_name=${PROJECT_NAME}"             -var="github_org=${GITHUB_ORG}"             -var="github_repo=${GITHUB_REPO}"
+      - if: github.event.inputs.action == 'apply'
+        run: terraform output
