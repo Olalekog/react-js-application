@@ -14,7 +14,4 @@ variable "deletion_protection" { type = bool }
 variable "skip_final_snapshot" { type = bool }
 variable "performance_insights_enabled" { type = bool }
 variable "kms_key_arn" { type = string }
-variable "tags" {
-  type    = map(string)
-  default = {}
-}
+variable "tags" { type = map(string) default = {} }
