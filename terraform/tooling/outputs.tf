@@ -1,5 +1,5 @@
 output "bootstrap_role_arn" {
-  value = aws_iam_role.tooling-bootstrap.arn
+  value = aws_iam_role.react-app-tooling-bootstrap.arn
 }
 
 output "terraform_state_bucket" {
