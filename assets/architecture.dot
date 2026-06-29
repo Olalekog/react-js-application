@@ -1,0 +1,53 @@
+digraph G {
+  graph [rankdir=LR, bgcolor="white", pad="0.5", nodesep="0.6", ranksep="0.9", fontname="Arial"];
+  node [shape=box, style="rounded,filled", fontname="Arial", fontsize=11, margin="0.12,0.08"];
+  edge [fontname="Arial", fontsize=10, color="#555555", arrowsize=0.8];
+
+  subgraph cluster_github {
+    label="GitHub"; color="#444444"; style="rounded";
+    github [label="GitHub Actions\nTooling / Bootstrap / App Workflows", fillcolor="#E8F0FE"];
+  }
+
+  subgraph cluster_tooling {
+    label="Tooling Account"; color="#2F5597"; style="rounded";
+    oidc [label="GitHub OIDC Provider", fillcolor="#D9EAF7"];
+    bootstrap [label="Bootstrap Role", fillcolor="#D9EAF7"];
+    state [label="S3 Terraform State\n+ DynamoDB Lock\n+ KMS State Key", fillcolor="#D9EAF7"];
+    ssm [label="SSM SecureString\nDeploy Role ARN Parameters", fillcolor="#D9EAF7"];
+  }
+
+  subgraph cluster_dev {
+    label="Dev Account"; color="#6AA84F"; style="rounded";
+    devrole [label="Dev Deploy Role", fillcolor="#E2F0D9"];
+    devecr [label="ECR Repos", fillcolor="#E2F0D9"];
+    devapp [label="3-Tier App Stack\nVPC • ALB • ASG • RDS MySQL\nKMS • Secrets Manager", fillcolor="#E2F0D9"];
+  }
+
+  subgraph cluster_uat {
+    label="UAT Account"; color="#BF9000"; style="rounded";
+    uatrole [label="UAT Deploy Role", fillcolor="#FFF2CC"];
+    uatecr [label="ECR Repos", fillcolor="#FFF2CC"];
+    uatapp [label="3-Tier App Stack\nVPC • ALB • ASG • RDS MySQL\nKMS • Secrets Manager", fillcolor="#FFF2CC"];
+  }
+
+  subgraph cluster_prod {
+    label="Production Account"; color="#990000"; style="rounded";
+    prodrole [label="Production Deploy Role", fillcolor="#F4CCCC"];
+    prodecr [label="ECR Repos", fillcolor="#F4CCCC"];
+    prodapp [label="3-Tier App Stack\nVPC • ALB • ASG • RDS MySQL\nKMS • Secrets Manager", fillcolor="#F4CCCC"];
+  }
+
+  github -> oidc [label="OIDC trust"];
+  oidc -> bootstrap [label="assume"];
+  bootstrap -> ssm [label="read role ARNs"];
+  bootstrap -> state [label="state access"];
+  ssm -> devrole;
+  ssm -> uatrole;
+  ssm -> prodrole;
+  devrole -> devecr [label="push/pull images"];
+  devrole -> devapp [label="terraform deploy"];
+  uatrole -> uatecr [label="push/pull images"];
+  uatrole -> uatapp [label="terraform deploy"];
+  prodrole -> prodecr [label="push/pull images"];
+  prodrole -> prodapp [label="terraform deploy"];
+}

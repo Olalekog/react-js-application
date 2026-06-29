@@ -1,0 +1,20 @@
+digraph G {
+  graph [rankdir=LR, bgcolor="white", pad="0.5", nodesep="0.5", ranksep="0.75", fontname="Arial"];
+  node [shape=box, style="rounded,filled", fontname="Arial", fontsize=11, margin="0.12,0.08", fillcolor="#F3F6FA"];
+  edge [fontname="Arial", fontsize=10, color="#555555", arrowsize=0.8];
+
+  user [label="User Browser", fillcolor="#E8F0FE"];
+  publicalb [label="Public ALB", fillcolor="#D9EAF7"];
+  frontend [label="Frontend EC2 ASG\nDocker: React + Nginx", fillcolor="#E2F0D9"];
+  internalalb [label="Internal ALB", fillcolor="#D9EAF7"];
+  backend [label="Backend EC2 ASG\nDocker: Python FastAPI", fillcolor="#E2F0D9"];
+  secret [label="AWS Secrets Manager\nRDS-managed DB secret", fillcolor="#FFF2CC"];
+  db [label="RDS MySQL\nPrivate DB Subnets", fillcolor="#F4CCCC"];
+
+  user -> publicalb [label="HTTP/HTTPS"];
+  publicalb -> frontend [label="/: React app"];
+  frontend -> internalalb [label="/api/* via Nginx proxy"];
+  internalalb -> backend [label="FastAPI requests"];
+  backend -> secret [label="GetSecretValue\n+ KMS decrypt"];
+  backend -> db [label="SQL insert/read\nport 3306"];
+}
