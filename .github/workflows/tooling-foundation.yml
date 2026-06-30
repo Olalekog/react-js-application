@@ -20,6 +20,9 @@ on:
       - reopened
       - edited
       - ready_for_review
+    paths:
+      - "terraform/tooling/**"
+      - ".github/workflows/tooling-foundation.yml"
 
   workflow_dispatch:
     inputs:
@@ -39,17 +42,19 @@ permissions:
   pull-requests: read
 
 env:
-  AWS_REGION: us-east-1
-  PROJECT_NAME: react-js-application
-  TOOLING_ACCOUNT_ID: "866934333672"
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+  TOOLING_ACCOUNT_ID: ${{ vars.TOOLING_ACCOUNT_ID }}
+  BOOTSTRAP_ROLE_ARN: ${{ vars.BOOTSTRAP_ROLE_ARN }}
   GITREPO_ORG: ${{ vars.GITREPO_ORG }}
   GIT_REPO: ${{ vars.GIT_REPO }}
-  TERRAFORM_VERSION: "1.9.0"
+  TERRAFORM_VERSION: ${{ vars.TERRAFORM_VERSION }}
 
 jobs:
   validate-promotion-path:
     name: Validate PR Promotion Path
     runs-on: ubuntu-latest
+
     if: github.event_name == 'pull_request'
 
     steps:
@@ -81,8 +86,10 @@ jobs:
   tooling-foundation:
     name: Tooling Foundation
     runs-on: ubuntu-latest
+
     needs:
       - validate-promotion-path
+
     if: |
       always() &&
       (
@@ -99,6 +106,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Validate required GitHub variables
+        shell: bash
+        run: |
+          REQUIRED_VARS=(
+            "AWS_REGION"
+            "PROJECT_NAME"
+            "TOOLING_ACCOUNT_ID"
+            "BOOTSTRAP_ROLE_ARN"
+            "GITREPO_ORG"
+            "GIT_REPO"
+            "TERRAFORM_VERSION"
+          )
+
+          for VAR_NAME in "${REQUIRED_VARS[@]}"; do
+            if [[ -z "${!VAR_NAME}" ]]; then
+              echo "Missing required GitHub variable: ${VAR_NAME}"
+              exit 1
+            fi
+          done
+
+          echo "All required GitHub variables are set."
+
       - name: Resolve Terraform action
         id: resolve-action
         shell: bash
@@ -108,34 +137,38 @@ jobs:
           elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
             TERRAFORM_ACTION="plan"
           else
-            TERRAFORM_ACTION="plan"
+            TERRAFORM_ACTION="apply"
           fi
+
           echo "terraform_action=${TERRAFORM_ACTION}" >> "$GITHUB_OUTPUT"
           echo "Terraform action: ${TERRAFORM_ACTION}"
 
-      - name: Configure AWS credentials for first tooling run
+      - name: Configure AWS credentials using GitHub OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.TOOLING_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.TOOLING_AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ env.BOOTSTRAP_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Confirm AWS identity
-        run: aws sts get-caller-identity
+        run: |
+          aws sts get-caller-identity
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Terraform Init
-        run: terraform init
-
       - name: Terraform Format Check
-        run: terraform fmt -check -recursive
+        run: |
+          terraform fmt -check -recursive
+
+      - name: Terraform Init
+        run: |
+          terraform init
 
       - name: Terraform Validate
-        run: terraform validate 
+        run: |
+          terraform validate
 
       - name: Terraform Plan
         if: steps.resolve-action.outputs.terraform_action == 'plan'
@@ -170,4 +203,5 @@ jobs:
 
       - name: Show Terraform Outputs
         if: steps.resolve-action.outputs.terraform_action == 'apply'
-        run: terraform output
+        run: |
+          terraform output
