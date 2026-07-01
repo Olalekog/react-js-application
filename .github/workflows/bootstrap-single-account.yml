@@ -1,0 +1,228 @@
+name: Bootstrap Single Account
+
+on:
+  push:
+    branches:
+      - dev
+      - uat
+      - production
+    paths:
+      - "terraform/bootstrap/**"
+      - ".github/workflows/bootstrap-single-account.yml"
+
+  pull_request:
+    branches:
+      - uat
+      - production
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - edited
+      - ready_for_review
+    paths:
+      - "terraform/bootstrap/**"
+      - ".github/workflows/bootstrap-single-account.yml"
+
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Terraform action"
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+        default: plan
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+  AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+  TOOLING_ACCOUNT_ID: ${{ vars.TOOLING_ACCOUNT_ID }}
+  BOOTSTRAP_ROLE_ARN: ${{ vars.BOOTSTRAP_ROLE_ARN }}
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+  TF_LOCK_TABLE: ${{ vars.TF_LOCK_TABLE }}
+  TF_STATE_KMS_KEY_ID: ${{ vars.TF_STATE_KMS_KEY_ID }}
+  TF_STATE_KMS_KEY_ARN: ${{ vars.TF_STATE_KMS_KEY_ARN }}
+  TERRAFORM_VERSION: ${{ vars.TERRAFORM_VERSION }}
+
+jobs:
+  validate-promotion-path:
+    name: Validate PR Promotion Path
+    runs-on: ubuntu-latest
+
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Validate source and target branch
+        shell: bash
+        run: |
+          SOURCE_BRANCH="${{ github.head_ref }}"
+          TARGET_BRANCH="${{ github.base_ref }}"
+
+          echo "Source branch: ${SOURCE_BRANCH}"
+          echo "Target branch: ${TARGET_BRANCH}"
+
+          if [[ "${TARGET_BRANCH}" == "uat" && "${SOURCE_BRANCH}" == "dev" ]]; then
+            echo "Valid promotion path: dev -> uat"
+            exit 0
+          fi
+
+          if [[ "${TARGET_BRANCH}" == "production" && "${SOURCE_BRANCH}" == "uat" ]]; then
+            echo "Valid promotion path: uat -> production"
+            exit 0
+          fi
+
+          echo "Invalid promotion path."
+          echo "Allowed promotion paths are:"
+          echo "  dev -> uat"
+          echo "  uat -> production"
+          exit 1
+
+  bootstrap:
+    name: Bootstrap Single Account
+    runs-on: ubuntu-latest
+
+    needs:
+      - validate-promotion-path
+
+    if: |
+      always() &&
+      (
+        github.event_name == 'push' ||
+        github.event_name == 'workflow_dispatch' ||
+        needs.validate-promotion-path.result == 'success'
+      )
+
+    defaults:
+      run:
+        working-directory: terraform/bootstrap
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate required GitHub variables
+        shell: bash
+        run: |
+          REQUIRED_VARS=(
+            "AWS_REGION"
+            "PROJECT_NAME"
+            "AWS_ACCOUNT_ID"
+            "TOOLING_ACCOUNT_ID"
+            "BOOTSTRAP_ROLE_ARN"
+            "TF_STATE_BUCKET"
+            "TF_LOCK_TABLE"
+            "TF_STATE_KMS_KEY_ID"
+            "TF_STATE_KMS_KEY_ARN"
+            "TERRAFORM_VERSION"
+          )
+
+          for VAR_NAME in "${REQUIRED_VARS[@]}"; do
+            if [[ -z "${!VAR_NAME}" ]]; then
+              echo "Missing required GitHub variable: ${VAR_NAME}"
+              exit 1
+            fi
+          done
+
+          echo "All required GitHub variables are set."
+
+      - name: Resolve Terraform action
+        id: resolve-action
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TERRAFORM_ACTION="${{ github.event.inputs.action }}"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            TERRAFORM_ACTION="plan"
+          else
+            TERRAFORM_ACTION="apply"
+          fi
+
+          echo "terraform_action=${TERRAFORM_ACTION}" >> "$GITHUB_OUTPUT"
+          echo "Terraform action: ${TERRAFORM_ACTION}"
+
+      - name: Configure AWS credentials using GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.BOOTSTRAP_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Confirm AWS identity
+        run: |
+          aws sts get-caller-identity
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=${PROJECT_NAME}/bootstrap/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
+            -backend-config="encrypt=true" \
+            -backend-config="kms_key_id=${TF_STATE_KMS_KEY_ID}"
+
+      - name: Terraform Format Check
+        run: |
+          terraform fmt -check -recursive
+
+      - name: Terraform Validate
+        run: |
+          terraform validate
+
+      - name: Terraform Plan
+        if: steps.resolve-action.outputs.terraform_action == 'plan'
+        run: |
+          terraform plan \
+            -var="aws_region=${AWS_REGION}" \
+            -var="project_name=${PROJECT_NAME}" \
+            -var="aws_account_id=${AWS_ACCOUNT_ID}" \
+            -var="tooling_account_id=${TOOLING_ACCOUNT_ID}" \
+            -var="bootstrap_role_arn=${BOOTSTRAP_ROLE_ARN}" \
+            -var="terraform_state_bucket=${TF_STATE_BUCKET}" \
+            -var="terraform_lock_table=${TF_LOCK_TABLE}" \
+            -var="terraform_state_kms_key_arn=${TF_STATE_KMS_KEY_ARN}" \
+            -out=tfplan
+
+      - name: Terraform Apply
+        if: steps.resolve-action.outputs.terraform_action == 'apply'
+        run: |
+          terraform apply -auto-approve \
+            -var="aws_region=${AWS_REGION}" \
+            -var="project_name=${PROJECT_NAME}" \
+            -var="aws_account_id=${AWS_ACCOUNT_ID}" \
+            -var="tooling_account_id=${TOOLING_ACCOUNT_ID}" \
+            -var="bootstrap_role_arn=${BOOTSTRAP_ROLE_ARN}" \
+            -var="terraform_state_bucket=${TF_STATE_BUCKET}" \
+            -var="terraform_lock_table=${TF_LOCK_TABLE}" \
+            -var="terraform_state_kms_key_arn=${TF_STATE_KMS_KEY_ARN}"
+
+      - name: Terraform Destroy
+        if: steps.resolve-action.outputs.terraform_action == 'destroy'
+        run: |
+          terraform destroy -auto-approve \
+            -var="aws_region=${AWS_REGION}" \
+            -var="project_name=${PROJECT_NAME}" \
+            -var="aws_account_id=${AWS_ACCOUNT_ID}" \
+            -var="tooling_account_id=${TOOLING_ACCOUNT_ID}" \
+            -var="bootstrap_role_arn=${BOOTSTRAP_ROLE_ARN}" \
+            -var="terraform_state_bucket=${TF_STATE_BUCKET}" \
+            -var="terraform_lock_table=${TF_LOCK_TABLE}" \
+            -var="terraform_state_kms_key_arn=${TF_STATE_KMS_KEY_ARN}"
+
+      - name: Show Terraform Outputs
+        if: steps.resolve-action.outputs.terraform_action == 'apply'
+        run: |
+          terraform output
