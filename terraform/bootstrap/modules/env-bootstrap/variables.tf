@@ -9,12 +9,12 @@ variable "environment" {
 }
 
 variable "account_id" {
-  description = "AWS account ID where resources are deployed."
+  description = "AWS account ID where environment resources are created."
   type        = string
 }
 
 variable "tooling_account_id" {
-  description = "Tooling AWS account ID. For single-account deployments, this is the same as account_id."
+  description = "AWS account ID where Terraform backend resources exist."
   type        = string
 }
 
@@ -34,7 +34,7 @@ variable "terraform_lock_table" {
 }
 
 variable "terraform_state_kms_key_arn" {
-  description = "KMS key ARN used to encrypt Terraform state and lock table."
+  description = "KMS key ARN used for Terraform backend encryption."
   type        = string
 }
 

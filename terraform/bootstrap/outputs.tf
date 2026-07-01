@@ -28,12 +28,22 @@ output "backend_ecr_repository_urls" {
   }
 }
 
-output "bootstrap_terraform_backend_policy_arns" {
-  description = "Terraform backend access policy ARNs attached to the bootstrap role by environment."
+output "bootstrap_backend_access_policy_names" {
+  description = "Inline IAM policy names attached to the bootstrap role for Terraform backend access."
 
   value = {
-    dev        = module.dev_environment_bootstrap.bootstrap_terraform_backend_policy_arn
-    uat        = module.uat_environment_bootstrap.bootstrap_terraform_backend_policy_arn
-    production = module.production_environment_bootstrap.bootstrap_terraform_backend_policy_arn
+    dev        = module.dev_environment_bootstrap.bootstrap_backend_access_policy_name
+    uat        = module.uat_environment_bootstrap.bootstrap_backend_access_policy_name
+    production = module.production_environment_bootstrap.bootstrap_backend_access_policy_name
+  }
+}
+
+output "bootstrap_kms_grant_ids" {
+  description = "KMS grant IDs created for the bootstrap role by environment."
+
+  value = {
+    dev        = module.dev_environment_bootstrap.bootstrap_kms_grant_id
+    uat        = module.uat_environment_bootstrap.bootstrap_kms_grant_id
+    production = module.production_environment_bootstrap.bootstrap_kms_grant_id
   }
 }

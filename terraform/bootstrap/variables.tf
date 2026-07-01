@@ -9,32 +9,32 @@ variable "project_name" {
 }
 
 variable "aws_account_id" {
-  description = "Single AWS account ID."
+  description = "Single AWS account ID used for dev, uat, and production."
   type        = string
 }
 
 variable "tooling_account_id" {
-  description = "Tooling AWS account ID."
+  description = "Tooling AWS account ID. For this single-account design, this is the same as aws_account_id."
   type        = string
 }
 
 variable "bootstrap_role_arn" {
-  description = "GitHub Actions bootstrap IAM role ARN."
+  description = "Existing GitHub Actions bootstrap IAM role ARN."
   type        = string
 }
 
 variable "terraform_state_bucket" {
-  description = "Terraform state S3 bucket name."
+  description = "Terraform remote state S3 bucket name."
   type        = string
 }
 
 variable "terraform_lock_table" {
-  description = "Terraform DynamoDB lock table name."
+  description = "Terraform DynamoDB state lock table name."
   type        = string
 }
 
 variable "terraform_state_kms_key_arn" {
-  description = "Terraform state KMS key ARN."
+  description = "KMS key ARN used to encrypt Terraform state and the DynamoDB lock table."
   type        = string
 }
 
