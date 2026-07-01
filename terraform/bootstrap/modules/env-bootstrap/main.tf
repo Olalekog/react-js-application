@@ -1,79 +1,196 @@
 data "aws_region" "current" {}
 
-data "aws_iam_policy_document" "github_actions_deploy_assume_role" {
-  statement {
-    sid     = "AllowBootstrapRoleAssumeDeployRole"
-    effect  = "Allow"
-    actions = ["sts:AssumeRole"]
 
-    principals {
-      type        = "AWS"
-      identifiers = [var.bootstrap_role_arn]
-    }
-  }
-}
 
 locals {
-  bootstrap_role_name = element(split("/", var.bootstrap_role_arn), length(split("/", var.bootstrap_role_arn)) - 1)
-}
-
-resource "aws_iam_role" "deploy" {
-  name               = "${var.project_name}-${var.environment}-github-actions-deploy-role"
-  assume_role_policy = data.aws_iam_policy_document.github_actions_deploy_assume_role.json
-
-  tags = merge(var.tags, {
-    Name        = "${var.project_name}-${var.environment}-github-actions-deploy-role"
-    Environment = var.environment
-  })
+  frontend_repository_name = "${var.project_name}/${var.environment}/react-frontend"
+  backend_repository_name  = "${var.project_name}/${var.environment}/fastapi-backend"
+  bootstrap_role_name      = element(split("/", var.bootstrap_role_arn), length(split("/", var.bootstrap_role_arn)) - 1)
 }
 
 resource "aws_ecr_repository" "frontend" {
-  name                 = "${var.project_name}/${var.environment}/react-frontend"
+  name                 = local.frontend_repository_name
   image_tag_mutability = "MUTABLE"
 
   image_scanning_configuration {
     scan_on_push = true
   }
 
+  encryption_configuration {
+    encryption_type = "KMS"
+  }
+
   tags = merge(var.tags, {
-    Name        = "${var.project_name}-${var.environment}-react-frontend"
+    Name        = local.frontend_repository_name
     Environment = var.environment
   })
 }
 
 resource "aws_ecr_repository" "backend" {
-  name                 = "${var.project_name}/${var.environment}/fastapi-backend"
+  name                 = local.backend_repository_name
   image_tag_mutability = "MUTABLE"
 
   image_scanning_configuration {
     scan_on_push = true
   }
 
+  encryption_configuration {
+    encryption_type = "KMS"
+  }
+
   tags = merge(var.tags, {
-    Name        = "${var.project_name}-${var.environment}-fastapi-backend"
+    Name        = local.backend_repository_name
     Environment = var.environment
   })
 }
 
-module "iam_backend_access" {
-  source = "./modules/iam"
+resource "aws_ecr_lifecycle_policy" "frontend" {
+  repository = aws_ecr_repository.frontend.name
 
-  project_name           = var.project_name
-  environment            = var.environment
-  bootstrap_role_name    = local.bootstrap_role_name
-  terraform_state_bucket = var.terraform_state_bucket
-  terraform_lock_table   = var.terraform_lock_table
-  tooling_account_id     = var.tooling_account_id
-  kms_key_arn            = var.terraform_state_kms_key_arn
-  aws_region             = data.aws_region.current.region
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep latest 20 revision-tagged frontend images"
+        selection = {
+          tagStatus     = "tagged"
+          tagPrefixList = ["${var.environment}-"]
+          countType     = "imageCountMoreThan"
+          countNumber   = 20
+        }
+        action = { type = "expire" }
+      }
+    ]
+  })
 }
 
-module "kms_backend_access" {
-  source = "./modules/kms"
+resource "aws_ecr_lifecycle_policy" "backend" {
+  repository = aws_ecr_repository.backend.name
 
-  project_name         = var.project_name
-  environment          = var.environment
-  bootstrap_role_arn   = var.bootstrap_role_arn
-  kms_key_arn          = var.terraform_state_kms_key_arn
-  grant_creation_token = "${var.project_name}-${var.environment}-bootstrap-backend-access"
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep latest 20 revision-tagged backend images"
+        selection = {
+          tagStatus     = "tagged"
+          tagPrefixList = ["${var.environment}-"]
+          countType     = "imageCountMoreThan"
+          countNumber   = 20
+        }
+        action = { type = "expire" }
+      }
+    ]
+  })
 }
+
+resource "aws_iam_role" "deploy" {
+  name = "${var.project_name}-${var.environment}-github-actions-deploy-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          AWS = var.bootstrap_role_arn
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = merge(var.tags, {
+    Environment = var.environment
+  })
+}
+
+resource "aws_iam_role_policy" "deploy" {
+  name = "${var.project_name}-${var.environment}-deploy-policy"
+  role = aws_iam_role.deploy.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
+        ]
+        Resource = "arn:aws:s3:::${var.terraform_state_bucket}/${var.project_name}/${var.environment}/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
+        ]
+        Resource = "arn:aws:s3:::${var.terraform_state_bucket}"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DescribeTable"
+        ]
+        Resource = "arn:aws:dynamodb:${data.aws_region.current.name}:${var.tooling_account_id}:table/${var.terraform_lock_table}"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:Encrypt",
+          "kms:GenerateDataKey",
+          "kms:GenerateDataKeyWithoutPlaintext",
+          "kms:DescribeKey",
+          "kms:ReEncryptFrom",
+          "kms:ReEncryptTo"
+        ]
+        Resource = var.terraform_state_kms_key_arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:*",
+          "ec2:*",
+          "autoscaling:*",
+          "elasticloadbalancing:*",
+          "rds:*",
+          "route53:*",
+          "acm:*",
+          "cloudwatch:*",
+          "logs:*",
+          "secretsmanager:*",
+          "ssm:*",
+          "kms:*",
+          "iam:Get*",
+          "iam:List*",
+          "iam:CreateRole",
+          "iam:DeleteRole",
+          "iam:PutRolePolicy",
+          "iam:DeleteRolePolicy",
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+          "iam:CreateInstanceProfile",
+          "iam:DeleteInstanceProfile",
+          "iam:AddRoleToInstanceProfile",
+          "iam:RemoveRoleFromInstanceProfile",
+          "iam:PassRole",
+          "iam:TagRole",
+          "iam:TagPolicy",
+          "iam:TagInstanceProfile"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Backend access for the existing GitHub Actions bootstrap role itself.
+# This fixes failures where the bootstrap role can assume via OIDC but cannot
+# decrypt the KMS-encrypted Terraform lock table/state backend.
