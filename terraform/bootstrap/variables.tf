@@ -1,33 +1,41 @@
 variable "aws_region" {
-  type = string
+  description = "AWS region where bootstrap resources are created."
+  type        = string
 }
 
 variable "project_name" {
-  type = string
+  description = "Project name used for naming resources."
+  type        = string
 }
 
 variable "aws_account_id" {
-  type = string
+  description = "Single AWS account ID used for dev, uat, and production."
+  type        = string
 }
 
 variable "tooling_account_id" {
-  type = string
+  description = "AWS account ID where tooling resources are managed. For single-account deployments, this is usually the same as aws_account_id."
+  type        = string
 }
 
 variable "bootstrap_role_arn" {
-  type = string
+  description = "GitHub Actions bootstrap role ARN assumed through OIDC."
+  type        = string
 }
 
 variable "terraform_state_bucket" {
-  type = string
+  description = "S3 bucket used for Terraform remote state."
+  type        = string
 }
 
 variable "terraform_lock_table" {
-  type = string
+  description = "DynamoDB table used for Terraform state locking."
+  type        = string
 }
 
 variable "terraform_state_kms_key_arn" {
-  type = string
+  description = "KMS key ARN used to encrypt Terraform state and SecureString parameters."
+  type        = string
 }
 
 variable "tags" {

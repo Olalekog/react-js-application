@@ -1,6 +1,9 @@
+data "aws_region" "current" {}
+
 locals {
   frontend_repository_name = "${var.project_name}/${var.environment}/react-frontend"
   backend_repository_name  = "${var.project_name}/${var.environment}/fastapi-backend"
+  bootstrap_role_name      = element(split("/", var.bootstrap_role_arn), length(split("/", var.bootstrap_role_arn)) - 1)
 }
 
 resource "aws_ecr_repository" "frontend" {
@@ -117,8 +120,11 @@ resource "aws_iam_role_policy" "deploy" {
         Resource = "arn:aws:s3:::${var.terraform_state_bucket}/${var.project_name}/${var.environment}/*"
       },
       {
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket"]
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
+        ]
         Resource = "arn:aws:s3:::${var.terraform_state_bucket}"
       },
       {
@@ -130,7 +136,7 @@ resource "aws_iam_role_policy" "deploy" {
           "dynamodb:UpdateItem",
           "dynamodb:DescribeTable"
         ]
-        Resource = "arn:aws:dynamodb:*:${var.tooling_account_id}:table/${var.terraform_lock_table}"
+        Resource = "arn:aws:dynamodb:${data.aws_region.current.name}:${var.tooling_account_id}:table/${var.terraform_lock_table}"
       },
       {
         Effect = "Allow"
@@ -138,7 +144,10 @@ resource "aws_iam_role_policy" "deploy" {
           "kms:Decrypt",
           "kms:Encrypt",
           "kms:GenerateDataKey",
-          "kms:DescribeKey"
+          "kms:GenerateDataKeyWithoutPlaintext",
+          "kms:DescribeKey",
+          "kms:ReEncryptFrom",
+          "kms:ReEncryptTo"
         ]
         Resource = var.terraform_state_kms_key_arn
       },
@@ -178,4 +187,79 @@ resource "aws_iam_role_policy" "deploy" {
       }
     ]
   })
+}
+
+# Backend access for the existing GitHub Actions bootstrap role itself.
+# This fixes failures where the bootstrap role can assume via OIDC but cannot
+# decrypt the KMS-encrypted Terraform lock table/state backend.
+data "aws_iam_policy_document" "bootstrap_terraform_backend_access" {
+  statement {
+    sid    = "AllowTerraformStateBucketAccess"
+    effect = "Allow"
+
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject",
+      "s3:ListBucket",
+      "s3:GetBucketLocation"
+    ]
+
+    resources = [
+      "arn:aws:s3:::${var.terraform_state_bucket}",
+      "arn:aws:s3:::${var.terraform_state_bucket}/*"
+    ]
+  }
+
+  statement {
+    sid    = "AllowTerraformLockTableAccess"
+    effect = "Allow"
+
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:DescribeTable"
+    ]
+
+    resources = [
+      "arn:aws:dynamodb:${data.aws_region.current.name}:${var.tooling_account_id}:table/${var.terraform_lock_table}"
+    ]
+  }
+
+  statement {
+    sid    = "AllowTerraformBackendKMSAccess"
+    effect = "Allow"
+
+    actions = [
+      "kms:Decrypt",
+      "kms:Encrypt",
+      "kms:GenerateDataKey",
+      "kms:GenerateDataKeyWithoutPlaintext",
+      "kms:DescribeKey",
+      "kms:ReEncryptFrom",
+      "kms:ReEncryptTo"
+    ]
+
+    resources = [
+      var.terraform_state_kms_key_arn
+    ]
+  }
+}
+
+resource "aws_iam_policy" "bootstrap_terraform_backend_access" {
+  name        = "${var.project_name}-${var.environment}-bootstrap-terraform-backend-access"
+  description = "Allows the existing GitHub Actions bootstrap role to access Terraform S3 state, DynamoDB lock table, and KMS key."
+  policy      = data.aws_iam_policy_document.bootstrap_terraform_backend_access.json
+
+  tags = merge(var.tags, {
+    Name        = "${var.project_name}-${var.environment}-bootstrap-terraform-backend-access"
+    Environment = var.environment
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "bootstrap_terraform_backend_access" {
+  role       = local.bootstrap_role_name
+  policy_arn = aws_iam_policy.bootstrap_terraform_backend_access.arn
 }

@@ -34,7 +34,7 @@ variable "terraform_lock_table" {
 }
 
 variable "terraform_state_kms_key_arn" {
-  description = "KMS key ARN used to encrypt Terraform state."
+  description = "KMS key ARN used to encrypt Terraform state and lock table."
   type        = string
 }
 
