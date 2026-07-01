@@ -22,3 +22,8 @@ output "bootstrap_terraform_backend_policy_arn" {
   description = "IAM policy ARN attached to the bootstrap role for Terraform backend access."
   value       = aws_iam_policy.bootstrap_terraform_backend_access.arn
 }
+
+output "terraform_backend_policy_arn" {
+  description = "IAM policy ARN that allows the bootstrap role to access Terraform backend resources."
+  value       = aws_iam_policy.terraform_backend_access.arn
+}

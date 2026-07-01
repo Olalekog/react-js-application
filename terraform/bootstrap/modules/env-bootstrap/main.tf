@@ -1,5 +1,7 @@
 data "aws_region" "current" {}
 
+
+
 locals {
   frontend_repository_name = "${var.project_name}/${var.environment}/react-frontend"
   backend_repository_name  = "${var.project_name}/${var.environment}/fastapi-backend"
@@ -262,4 +264,77 @@ resource "aws_iam_policy" "bootstrap_terraform_backend_access" {
 resource "aws_iam_role_policy_attachment" "bootstrap_terraform_backend_access" {
   role       = local.bootstrap_role_name
   policy_arn = aws_iam_policy.bootstrap_terraform_backend_access.arn
+}
+
+data "aws_iam_policy_document" "terraform_backend_access" {
+  statement {
+    sid    = "AllowTerraformStateBucketAccess"
+    effect = "Allow"
+
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject",
+      "s3:ListBucket",
+      "s3:GetBucketLocation"
+    ]
+
+    resources = [
+      "arn:aws:s3:::${var.terraform_state_bucket}",
+      "arn:aws:s3:::${var.terraform_state_bucket}/*"
+    ]
+  }
+
+  statement {
+    sid    = "AllowTerraformLockTableAccess"
+    effect = "Allow"
+
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:DescribeTable"
+    ]
+
+    resources = [
+      "arn:aws:dynamodb:${data.aws_region.current.name}:${var.tooling_account_id}:table/${var.terraform_lock_table}"
+    ]
+  }
+
+  statement {
+    sid    = "AllowTerraformBackendKMSAccess"
+    effect = "Allow"
+
+    actions = [
+      "kms:Decrypt",
+      "kms:Encrypt",
+      "kms:GenerateDataKey",
+      "kms:GenerateDataKeyWithoutPlaintext",
+      "kms:DescribeKey",
+      "kms:ReEncryptFrom",
+      "kms:ReEncryptTo"
+    ]
+
+    resources = [
+      var.terraform_state_kms_key_arn
+    ]
+  }
+}
+
+resource "aws_iam_policy" "terraform_backend_access" {
+  name        = "${var.project_name}-${var.environment}-terraform-backend-access"
+  description = "Allows GitHub Actions bootstrap role to access Terraform S3 state, DynamoDB lock table, and KMS key."
+
+  policy = data.aws_iam_policy_document.terraform_backend_access.json
+
+  tags = merge(var.tags, {
+    Name        = "${var.project_name}-${var.environment}-terraform-backend-access"
+    Environment = var.environment
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "terraform_backend_access" {
+  role       = local.bootstrap_role_name
+  policy_arn = aws_iam_policy.terraform_backend_access.arn
 }

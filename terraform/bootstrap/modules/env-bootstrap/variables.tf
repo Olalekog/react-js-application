@@ -9,27 +9,27 @@ variable "environment" {
 }
 
 variable "account_id" {
-  description = "AWS account ID where the environment resources are created."
+  description = "AWS account ID where resources are deployed."
   type        = string
 }
 
 variable "tooling_account_id" {
-  description = "AWS account ID where Terraform backend resources are managed. For single-account deployments, this can be the same as account_id."
+  description = "Tooling AWS account ID. For single-account deployments, this is the same as account_id."
   type        = string
 }
 
 variable "bootstrap_role_arn" {
-  description = "Bootstrap IAM role ARN assumed by GitHub Actions using OIDC."
+  description = "Existing GitHub Actions bootstrap IAM role ARN."
   type        = string
 }
 
 variable "terraform_state_bucket" {
-  description = "S3 bucket used for Terraform remote state."
+  description = "Terraform remote state S3 bucket name."
   type        = string
 }
 
 variable "terraform_lock_table" {
-  description = "DynamoDB table used for Terraform state locking."
+  description = "Terraform DynamoDB lock table name."
   type        = string
 }
 
