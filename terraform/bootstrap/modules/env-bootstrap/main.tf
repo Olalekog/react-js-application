@@ -117,8 +117,8 @@ resource "aws_iam_role_policy" "deploy" {
         Resource = "arn:aws:s3:::${var.terraform_state_bucket}/${var.project_name}/${var.environment}/*"
       },
       {
-        Effect = "Allow"
-        Action = ["s3:ListBucket"]
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
         Resource = "arn:aws:s3:::${var.terraform_state_bucket}"
       },
       {
